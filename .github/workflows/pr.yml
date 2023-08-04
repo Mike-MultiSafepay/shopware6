@@ -1,0 +1,77 @@
+name: Quality check (PR)
+on:
+  pull_request:
+    paths:
+      - '**.php'
+jobs:
+  phpunit:
+    needs: phpcs
+    name: PHPUnit Tests | Shopware ${{ matrix.shopware }}, PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+#          - shopware: '6.4.20.2'
+#            php: '7.4'
+          - shopware: '6.5.4.1'
+            php: '8.2'
+    steps:
+      - name: Clone Code
+        uses: actions/checkout@v2
+      - name: Download Docker
+        run: docker pull dockware/dev:${{ matrix.shopware }}
+      - name: Start Docker
+        run: |
+          docker run --rm -p 80:80 -p 443:443 --name shop --env PHP_VERSION=${{ matrix.php }} -d dockware/dev:${{ matrix.shopware }}
+          sleep 30
+          docker logs shop
+      - name: Upload into Docker
+        run: |
+          docker cp . shop:/var/www/html/custom/plugins/MltisafeMultiSafepay
+          docker exec shop bash -c 'sudo chown www-data:www-data /var/www/html/custom/plugins -R'
+      - name: Install dev-tools
+        run: docker exec shop bash -c 'composer require --dev dev-tools:1.2.0'
+      - name: Install and Build Plugin
+        run: |
+          docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c 'composer update'
+          docker exec shop bash -c 'php bin/console plugin:refresh'
+          docker exec shop bash -c 'php bin/console plugin:install --activate MltisafeMultiSafepay'
+          docker exec shop bash -c 'php bin/console cache:clear'
+      - name: Run PHPUnit
+        run: docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c '../../../vendor/bin/phpunit --configuration=phpunit.xml.dist --coverage-clover=coverage.xml'
+  phpcs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Install PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+      # Install dependencies and handle caching in one go.
+      # @link https://github.com/marketplace/actions/install-composer-dependencies
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v2
+      - name: Fix styling
+        id: phpcbf
+        continue-on-error: true
+        run: vendor/bin/phpcbf --standard=phpcs.ruleset.xml --extensions=php .
+        # Commit all changed files back to the repository
+      - name: Commit changes
+        if: success()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_options: '--no-verify'
+      - name: Check PHP code style
+        id: phpcs
+        run: vendor/bin/phpcs --report-full --report-checkstyle=./phpcs-report.xml --standard=phpcs.ruleset.xml .
+      - name: Show PHPCS results in PR
+        if: ${{ always() && steps.phpcs.outcome == 'failure' }}
+        uses: staabm/annotate-pull-request-from-checkstyle-action@v1
+        with:
+          files: phpcs-report.xml
