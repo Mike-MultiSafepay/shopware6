@@ -9,6 +9,7 @@ on:
       phpVersion:
         description: 'PHP Version'
         required: true
+        type: choice
         options:
           - '7.4'
           - '8.0'
@@ -17,18 +18,12 @@ on:
 jobs:
 
   e2e:
-    name: Plugin v${{ matrix.plugin }} | Shopware ${{ github.event.inputs.swVersion }}
+    name: Shopware ${{ github.event.inputs.swVersion }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        plugin: [ '1.2', '1.1', '1.0' ]
     steps:
 
       - name: Clone Code
         uses: actions/checkout@v2
-        with:
-          ref: refs/tags/v${{ matrix.plugin }}
 
       - name: Download Docker
         run: |
