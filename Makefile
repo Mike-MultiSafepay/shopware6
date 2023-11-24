@@ -13,10 +13,6 @@ install:
 	docker-compose exec app php bin/console plugin:refresh
 	docker-compose exec app php bin/console plugin:install --clearCache --activate MltisafeMultiSafepay
 
-.PHONY: phpunit
-phpunit:
-	docker-compose exec --workdir=/var/www/html app vendor/bin/phpunit --configuration=./custom/plugins/MltisafeMultiSafepay/phpunit.xml.dist
-
 administration-build:
 	docker-compose exec app  php psh.phar administration:build --DB_HOST="127.0.0.1" --DB_USER="root" --DB_PASSWORD="root"
 	mv ./src/Resources/public/administration/js/mltisafemultisafepay.js ./src/Resources/public/administration/js/mltisafe-multi-safepay.js
@@ -40,3 +36,16 @@ activate-plugin:
 	@cd ../../.. && php bin/console plugin:install -c -r --activate MltisafeMultiSafepay
 
 # ------------------------------------------------------------------------------------------------------------
+
+phpunit:
+	docker run --rm --name shop --env PHP_VERSION=8.2 -d dockware/dev:6.5.4.1
+	sleep 30
+	docker logs shop
+	docker cp . shop:/var/www/html/custom/plugins/MltisafeMultiSafepay
+	docker exec shop bash -c 'sudo chown www-data:www-data /var/www/html/custom/plugins -R'
+	docker exec shop bash -c 'composer require --dev dev-tools:1.2.0'
+	docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c 'composer update'
+	docker exec shop bash -c 'php bin/console plugin:refresh'
+	docker exec shop bash -c 'php bin/console plugin:install MltisafeMultiSafepay --activate'
+	docker exec shop bash -c 'php bin/console cache:clear'
+	docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c '../../../vendor/bin/phpunit -h --configuration=phpunit.xml.dist --coverage-clover=coverage.xml'

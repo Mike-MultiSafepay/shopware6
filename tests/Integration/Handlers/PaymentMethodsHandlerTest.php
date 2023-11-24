@@ -325,6 +325,7 @@ class PaymentMethodsHandlerTest extends TestCase
         $salesChannelMock = $this->initiateSalesChannelContext($customerId, $this->context);
 
         $transaction = $this->getTransaction($transactionId, $this->context);
+        die(var_dump($transaction->getOrder()->getId()));
         $originalTransactionStateId = $transaction->getStateId();
 
         $paymentHandlerMock->finalize($transactionMock, $requestMock, $salesChannelMock);

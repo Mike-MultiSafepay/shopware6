@@ -6,65 +6,48 @@ on:
 jobs:
   phpunit:
     needs: phpcs
-    services:
-      mysql:
-        image: mysql:5.7
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: false
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: shopware
-        ports:
-          - 3306
-        options: --tmpfs /tmp:rw --tmpfs /var/lib/mysql:rw --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    name: PHPUnit Tests | Shopware ${{ matrix.shopware }}, PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        php-version: [ '7.4' ]
-        shopware_version: [ 'v6.4.8.1' ]
-    name: Integration test - Php version ${{ matrix.php-version }} with Shopware ${{ matrix.shopware_version }}
+        include:
+#          - shopware: '6.4.20.2'
+#            php: '7.4'
+          - shopware: '6.5.4.1'
+            php: '8.2'
     steps:
-      - name: Install php
-        uses: shivammathur/setup-php@master
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: intl
-      - name: Disable mysqldump column statistics
-        run: echo 'column-statistics=0' | sudo tee -a /etc/mysql/conf.d/mysqldump.cnf
-      - name: Checkout Shopware 6 code
+      - name: Clone Code
         uses: actions/checkout@v2
-        with:
-          repository: shopware/development
-          ref: ${{ matrix.shopware_version }}
-      - name: Checkout code
-        uses: actions/checkout@v2
-        with:
-          path: custom/plugins/MltisafeMultiSafepay
-      - name: Install Shopware
-        run: ./psh.phar init --DB_HOST="127.0.0.1" --DB_USER="root" --DB_PASSWORD="password" --DB_PORT=${{ job.services.mysql.ports['3306'] }}
-      - name: Install Multisafepay dependencies
-        working-directory: ./custom/plugins/MltisafeMultiSafepay
-        #TODO: Add github/cache here
-        run: composer install --no-dev
-      - name: Install Multisafepay
-        run: bin/console plugin:refresh && bin/console plugin:install -c --activate  MltisafeMultiSafepay
-      - name: Initialize test databases
-        run: ./psh.phar init-test-databases --DB_HOST="127.0.0.1" --DB_USER="root" --DB_PASSWORD="password" --DB_PORT=${{ job.services.mysql.ports['3306'] }}
+      - name: Download Docker
+        run: docker pull dockware/dev:${{ matrix.shopware }}
+      - name: Start Docker
+        run: |
+          docker run --rm -p 80:80 -p 443:443 --name shop --env PHP_VERSION=${{ matrix.php }} -d dockware/dev:${{ matrix.shopware }}
+          sleep 30
+          docker logs shop
+      - name: Upload into Docker
+        run: |
+          docker cp . shop:/var/www/html/custom/plugins/MltisafeMultiSafepay
+          docker exec shop bash -c 'sudo chown www-data:www-data /var/www/html/custom/plugins -R'
+      - name: Install dev-tools
+        run: docker exec shop bash -c 'composer require --dev dev-tools:1.2.0'
+      - name: Install and Build Plugin
+        run: |
+          docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c 'composer update'
+          docker exec shop bash -c 'php bin/console plugin:refresh'
+          docker exec shop bash -c 'php bin/console plugin:install --activate MltisafeMultiSafepay'
+          docker exec shop bash -c 'php bin/console cache:clear'
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --configuration=./custom/plugins/MltisafeMultiSafepay/phpunit.xml.dist --coverage-clover=./custom/plugins/MltisafeMultiSafepay/coverage.xml
-      - name: Send clover to codecov
-        if: ${{ always() }}
-        working-directory: ./custom/plugins/MltisafeMultiSafepay
-        run: bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }} -R .
+        run: docker exec -w '/var/www/html/custom/plugins/MltisafeMultiSafepay' shop bash -c '../../../vendor/bin/phpunit --configuration=phpunit.xml.dist --coverage-clover=coverage.xml'
   phpcs:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
-      pull-requests: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.head_ref }}
       - name: Install PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -79,7 +62,11 @@ jobs:
         continue-on-error: true
         run: vendor/bin/phpcbf --standard=phpcs.ruleset.xml --extensions=php .
         # Commit all changed files back to the repository
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - name: Commit changes
+        if: success()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_options: '--no-verify'
       - name: Check PHP code style
         id: phpcs
         run: vendor/bin/phpcs --report-full --report-checkstyle=./phpcs-report.xml --standard=phpcs.ruleset.xml .

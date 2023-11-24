@@ -2,14 +2,39 @@
 <ruleset name="MultiSafepay">
     <description>MultiSafepay coding styles rules</description>
     <arg name="extensions" value="php" />
-    <rule ref="./vendor/multisafepay/coding-standards/php72.phpcs.xml">
-        <exclude name="SlevomatCodingStandard.ControlStructures.AssignmentInCondition.AssignmentInCondition"/>
+    <rule ref="PSR2"/>
+    <rule ref="Generic.Files.LineLength.TooLong">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Generic.Files.LineEndings">
+        <properties>
+            <property name="eolChar" value="\n"/>
+        </properties>
+    </rule>
+    <!-- The PHP constants true, false, and null MUST be in lower case. -->
+    <rule ref="Generic.PHP.LowerCaseConstant"/>
+    <rule ref="PHPCompatibility"/>
+    <rule ref="SlevomatCodingStandard.PHP.UselessSemicolon"/>
+    <rule ref="SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses"/>
+    <rule ref="SlevomatCodingStandard.TypeHints.ReturnTypeHintSpacing"/>
+    <rule ref="SlevomatCodingStandard.Namespaces.MultipleUsesPerLine"/>
+    <rule ref="SlevomatCodingStandard.Namespaces.UseDoesNotStartWithBackslash"/>
+    <rule ref="SlevomatCodingStandard.Variables.UnusedVariable"/>
+    <rule ref="SlevomatCodingStandard.Classes.ClassConstantVisibility"/>
+    <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
+        <properties>
+            <property name="declareOnFirstLine" value="true"/>
+            <property name="spacesCountAroundEqualsSign" value="null"/>
+            <property name="linesCountBeforeDeclare" value="null"/>
+            <property name="linesCountAfterDeclare" value="null"/>
+        </properties>
     </rule>
     <rule ref="SlevomatCodingStandard.Namespaces.UnusedUses">
         <properties>
             <property name="searchAnnotations" value="true"/>
         </properties>
     </rule>
+    <config name="testVersion" value="7.4-"/>
     <exclude-pattern>*/vendor/*</exclude-pattern>
     <exclude-pattern>*/tests/bootstrap.php</exclude-pattern>
     <exclude-pattern>*/src/Resources/public/*</exclude-pattern>
